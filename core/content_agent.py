@@ -90,7 +90,7 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
     similarity_threshold = _load_similarity_threshold()
     min_pui = _load_min_pui()
 
-    def evaluate(content: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    def evaluate(content: Dict[str, Any], attempt: int) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
         """safety→유사도/유니크→PUI까지 검사하고, publish 시 결과 리턴"""
         nonlocal planning_info
         # slug 주입
@@ -101,6 +101,7 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
         joined = _flatten_content(content)
         safety_result = safety.review_content(joined)
         safety_status = safety_result.get("status")
+        logging.info("🛡 Safety 결과(시도 %s): status=%s, reason=%s", attempt, safety_status, safety_result.get("reason"))
         if safety_status in ("EDIT", "DISCARD"):
             return None, {"reason": safety_result.get("reason", "safety_discard"), "refined": safety_result.get("refined_content")}
 
@@ -170,14 +171,16 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
 
     # 1차: 초안 생성
     content = writer_client.generate(case_row, safe_test_mode=safe_mode, planning_info=planning_info)
+    logging.info("✏️ 초안 생성 완료: case_id=%s", case_id)
     attempt = 1
     while attempt <= attempts_allowed:
         if not content:
             last_reason = "writer_failed"
             break
         # 평가
-        publish_result, info = evaluate(content)
+        publish_result, info = evaluate(content, attempt)
         if publish_result:
+            logging.info("✅ 발행 성공: case_id=%s, attempts=%s", case_id, attempt)
             publish_result["attempts"] = attempt
             return publish_result
 
@@ -208,22 +211,27 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
                 planning_info.get("structure_type"),
                 case_row.get("category") or "debt",
             )
+            logging.info("🧹 최종 폐기: %s (%s)", case_id, reason or "max_attempts_exceeded")
             return {"status": "discarded", "reason": reason or "max_attempts_exceeded"}
 
         # 2차: safety reason 기반 리라이트
         safety_fb = reason or "법률 자문/보장 어투 제거 및 안전한 정보 톤으로 재작성"
-        logging.info("🔁 리라이트 재시도 %s (시도 %s/%s): %s", case_id, attempt + 1, attempts_allowed, safety_fb)
+        prev_text = _flatten_content(content)
+        logging.info("🔁 Safety에 걸려서 자가 리라이트 시도 (시도 번호=%s/%s): %s", attempt + 1, attempts_allowed, safety_fb)
         content = writer_client.refine_draft(
-            {**case_row, "draft_summary": content},
+            {**case_row, "draft_summary": prev_text, "previous_draft": prev_text},
             feedback=safety_fb,
             safe_test_mode=safe_mode,
             planning_info=planning_info,
             safety_feedback=safety_fb,
         )
+        if content:
+            logging.info("✏️ 자가 리라이트 완료: case_id=%s", case_id)
         attempt += 1
 
     # 실패 폴백
     db.update_status(case_id, "discarded")
+    logging.info("🧹 최종 폐기: %s (%s)", case_id, last_reason if 'last_reason' in locals() else "max_attempts_exceeded")
     return {"status": "discarded", "reason": "max_attempts_exceeded"}
 
 
