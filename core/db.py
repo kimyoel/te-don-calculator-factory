@@ -41,9 +41,15 @@ def init_db() -> None:
                 faq2_a TEXT,
                 faq3_q TEXT,
                 faq3_a TEXT,
-                status TEXT,
+                status TEXT DEFAULT 'todo',
                 batch_date TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                user_intent TEXT,
+                relationship TEXT,
+                legal_strategy TEXT,
+                amount_band TEXT,
+                structure_type TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -88,6 +94,11 @@ def upsert_case(row: Dict[str, Any]) -> None:
         "faq3_a",
         "status",
         "batch_date",
+        "user_intent",
+        "relationship",
+        "legal_strategy",
+        "amount_band",
+        "structure_type",
     ]
     data = {k: row.get(k) for k in keys}
     # 안전하게 기본값 채우기
@@ -178,11 +189,11 @@ def count_cases_by_strategy_and_amount() -> Dict[Tuple[str, str], int]:
     """
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT legal_strategy, amount_band, COUNT(*) as cnt FROM cases GROUP BY legal_strategy, amount_band"
+            "SELECT legal_strategy, amount_band, status, COUNT(*) as cnt FROM cases GROUP BY legal_strategy, amount_band, status"
         ).fetchall()
-        result: Dict[Tuple[str, str], int] = {}
+        result: Dict[Tuple[str, str, str], int] = {}
         for r in rows:
-            key = (r["legal_strategy"] or "", r["amount_band"] or "")
+            key = (r["legal_strategy"] or "", r["amount_band"] or "", r["status"] or "")
             result[key] = r["cnt"]
         return result
 
