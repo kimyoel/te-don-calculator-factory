@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="naver-site-verification" content="59fd3a0780caa70b37b5ae1976725f79a5e6b0c4" />
+    <title>떼인 돈 계산기 💸</title>
+    
+    <!-- ========== CDN Libraries ========== -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- html2canvas 별도 로드 (html2pdf 번들 외 직접 호출용) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- jsPDF UMD (직접 addImage 사용) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        /* ========== 폰트 설정 ========== */
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        * {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        }
+        
+        /* ========== 단어 중간 줄바꿈 방지 ========== */
+        .keep-all {
+            word-break: keep-all;
+        }
+        
+        /* ========== 페이지 전환 애니메이션 ========== */
+        .page {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        
+        .page.hidden {
+            display: none;
+        }
+        
+        .page.fade-out {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        
+        .page.fade-in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* ========== 탭 전환 애니메이션 ========== */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* ========== 결과 금액 펄스 애니메이션 ========== */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        .result-amount {
+            animation: pulse 2s infinite;
+        }
+        
+        /* ========== 내용증명 A4 스타일 + 종이 그림자 효과 ========== */
+        .certificate-preview {
+            aspect-ratio: 210 / 297;
+            max-height: 600px;
+            overflow-y: auto;
+            box-shadow: 
+                0 1px 3px rgba(0,0,0,0.12),
+                0 4px 6px rgba(0,0,0,0.08),
+                0 10px 20px rgba(0,0,0,0.06),
+                0 0 40px rgba(0,0,0,0.03);
+            transform: perspective(1000px) rotateX(1deg);
+        }
+        
+        /* ========== 이자율 카드 스타일 ========== */
+        .rate-card {
+            transition: all 0.2s ease;
+        }
+        
+        .rate-card:has(input:checked) {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+        }
+        
+        /* ========== 세그먼트 컨트롤 스타일 ========== */
+        .segment-control {
+            display: flex;
+            background: #f3f4f6;
+            border-radius: 12px;
+            padding: 4px;
+        }
+        
+        .segment-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            background: transparent;
+            color: #6b7280;
+        }
+        
+        .segment-btn.active {
+            background: white;
+            color: #1f2937;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05);
+        }
+        
+        .segment-btn:hover:not(.active) {
+            color: #374151;
+        }
+        
+        /* ========== 복사 버튼 효과 ========== */
+        .copy-success {
+            background-color: #22c55e !important;
+        }
+        
+        /* ========== 모달 스타일 ========== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            animation: modalSlideUp 0.3s ease;
+        }
+        
+        @keyframes modalSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        /* ========== 카운팅 애니메이션용 ========== */
+        .counting {
+            transition: all 0.1s ease-out;
+        }
+        
+        /* ========== 타이틀 그림자 효과 ========== */
+        .title-shadow {
+            text-shadow: 
+                0 2px 4px rgba(0, 0, 0, 0.1),
+                0 4px 8px rgba(0, 0, 0, 0.08);
+        }
+        
+        /* ========== 후원 버튼 애니메이션 ========== */
+        @keyframes gentleBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+        
+        .donation-btn {
+            animation: gentleBounce 3s ease-in-out infinite;
+        }
+        
+        .donation-btn:hover {
+            animation: none;
+            transform: scale(1.05);
+        }
+        
+        /* ========== 결과 금액 가독성 ========== */
+        .result-money {
+            word-break: keep-all;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+        
+        /* ========== 메인 CTA 버튼 애니메이션 ========== */
+        .cta-btn {
+            transition: all 0.3s ease;
+        }
+        
+        .cta-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3);
+        }
+        
+        .cta-btn:active {
+            transform: translateY(0);
+        }
+        
+        /* ========== 섹션 구분선 스타일 ========== */
+        .section-divider {
+            border-top: 1px dashed #e5e7eb;
+            margin: 24px 0;
+        }
+
+        /* 안내 박스 */
+        .notice-box {
+            margin-top: 12px;
+            margin-bottom: 12px;
+            padding: 14px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background: #f8fafc;
+            color: #374151;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-100 via-gray-50 to-slate-200 min-h-screen">
+    
+    <!-- ==================== [Page 1] 입력 화면 ==================== -->
+    <div id="inputPage" class="page fade-in">
+        <div class="max-w-lg mx-auto px-4 pb-12">
+            
+            <!-- 헤더 -->
+            <header class="text-center py-10">
+                <h1 class="text-4xl md:text-5xl font-black text-gray-800 mb-3 title-shadow">
+                    떼인 돈 계산기 💸
+                </h1>
+                <p class="text-sm text-gray-500 bg-white/60 inline-block px-4 py-1 rounded-full">
+                    🔒 서버 저장 없이, 오직 브라우저에서만 계산됩니다
+                </p>
+            </header>
+
+            <!-- 입력 폼 -->
+            <section class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+                
+                <!-- ========== [섹션1] 채권 정보 ========== -->
+                <div class="mb-2">
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
+                        <i class="fas fa-file-invoice-dollar mr-1"></i> 채권 정보
+                    </p>
+                </div>
+                
+                <!-- 미수금 원금 -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-coins text-amber-500 mr-1"></i>
+                        못 받은 돈 (원금)
+                    </label>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            inputmode="numeric"
+                            id="principal"
+                            class="w-full h-14 px-4 pr-12 text-xl font-bold border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                            placeholder="예: 1,000,000"
+                        >
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">원</span>
+                    </div>
+                </div>
+                
+                <!-- 연체 시작일 -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calendar-day text-rose-500 mr-1"></i>
+                        돈 주기로 한 날짜
+                    </label>
+                    <input 
+                        type="date" 
+                        id="startDate"
+                        class="w-full h-14 px-4 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                    >
+                </div>
+                
+                <!-- 이자율 선택 -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">
+                        <i class="fas fa-percent text-emerald-500 mr-1"></i>
+                        이자율 선택
+                    </label>
+                    <div class="flex flex-col gap-3">
+                        <label class="rate-card flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 transition-all">
+                            <div class="flex items-center gap-3">
+                                <input type="radio" name="interestRate" value="6" checked class="w-5 h-5 text-blue-600 flex-shrink-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-gray-800">상법 6%</span>
+                                    <span class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">기본</span>
+                                </div>
+                            </div>
+                            <span class="text-xs text-gray-400 text-right keep-all hidden sm:block">계약서가 없거나 상거래 미수금일 때</span>
+                        </label>
+                        
+                        <label class="rate-card flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 transition-all">
+                            <div class="flex items-center gap-3">
+                                <input type="radio" name="interestRate" value="12" class="w-5 h-5 text-blue-600 flex-shrink-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-gray-800">소촉법 12%</span>
+                                    <span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">소송 시</span>
+                                </div>
+                            </div>
+                            <span class="text-xs text-gray-400 text-right keep-all hidden sm:block">법원에 소송 제기 이후부터</span>
+                        </label>
+                        
+                        <label class="rate-card flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-blue-300 transition-all">
+                            <div class="flex items-center gap-3">
+                                <input type="radio" name="interestRate" value="custom" id="customRateRadio" class="w-5 h-5 text-blue-600 flex-shrink-0">
+                                <span class="font-bold text-gray-800">직접입력</span>
+                            </div>
+                            <span class="text-xs text-gray-400 text-right keep-all hidden sm:block">최대 20%까지 입력 가능</span>
+                        </label>
+                    </div>
+                    
+                    <div id="customRateWrapper" class="mt-3 hidden">
+                        <div class="relative">
+                            <input 
+                                type="number" 
+                                id="customRate"
+                                min="0"
+                                max="20"
+                                step="0.1"
+                                class="w-full h-12 px-4 pr-12 text-lg border-2 border-blue-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                                placeholder="이자율 입력 (최대 20%)"
+                            >
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">%</span>
+                        </div>
+                        <p id="rateWarning" class="text-xs text-red-500 mt-1 hidden">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                            이자제한법상 최고이자율 20%를 초과할 수 없어 자동 조정되었습니다.
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- 구분선 -->
+                <div class="section-divider"></div>
+                
+                <!-- ========== [섹션2] 채무자(상대방) 정보 ========== -->
+                <div class="mb-4">
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
+                        <i class="fas fa-user-slash mr-1"></i> 채무자 (돈을 갚아야 할 사람)
+                    </p>
+                </div>
+                
+                <!-- 상대방 유형 선택 -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">
+                        <i class="fas fa-user-tag text-purple-500 mr-1"></i>
+                        상대방 유형
+                    </label>
+                    <div class="segment-control">
+                        <button type="button" class="segment-btn active" data-type="company">
+                            🏢 기업
+                        </button>
+                        <button type="button" class="segment-btn" data-type="individual">
+                            👤 개인
+                        </button>
+                    </div>
+                    <input type="hidden" id="debtorType" value="company">
+                </div>
+                
+                <!-- 채무자 이름 -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-user text-blue-500 mr-1"></i>
+                        채무자 이름
+                    </label>
+                    <input 
+                        type="text" 
+                        id="debtorName"
+                        class="w-full h-14 px-4 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                        placeholder="홍길동 또는 (주)악덕기업"
+                    >
+                </div>
+                
+                <!-- 구분선 -->
+                <div class="section-divider"></div>
+                
+                <!-- ========== [섹션3] 발신인(나) 정보 - 신규 추가 ========== -->
+                <div class="mb-4">
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
+                        <i class="fas fa-user-check mr-1"></i> 발신인 (나의 정보)
+                    </p>
+                </div>
+                
+                <!-- 발신인 이름/상호 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-id-card text-indigo-500 mr-1"></i>
+                        발신인 이름 또는 상호
+                    </label>
+                    <input 
+                        type="text" 
+                        id="senderName"
+                        class="w-full h-12 px-4 text-base border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                        placeholder="예: 김철수 또는 (주)내회사"
+                    >
+                </div>
+                
+                <!-- 발신인 주소 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-map-marker-alt text-red-500 mr-1"></i>
+                        발신인 주소
+                    </label>
+                    <input 
+                        type="text" 
+                        id="senderAddress"
+                        class="w-full h-12 px-4 text-base border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                        placeholder="예: 서울특별시 강남구 테헤란로 123, 456호"
+                    >
+                </div>
+                
+                <!-- 발신인 연락처 (선택) -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-phone text-green-500 mr-1"></i>
+                        발신인 연락처 <span class="text-xs font-normal text-gray-400">(선택)</span>
+                    </label>
+                    <input 
+                        type="tel" 
+                        id="senderPhone"
+                        class="w-full h-12 px-4 text-base border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                        placeholder="예: 010-1234-5678"
+                    >
+                </div>
+                
+                <!-- 구분선 -->
+                <div class="section-divider"></div>
+                
+                <!-- ========== [섹션4] 내 입금 계좌 정보 (아코디언) ========== -->
+                <div class="mb-4">
+                    <button 
+                        id="accountAccordionToggle"
+                        type="button"
+                        class="w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-blue-200 transition-all"
+                        aria-expanded="false"
+                    >
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-piggy-bank text-amber-500"></i>
+                            <p class="text-sm font-semibold text-gray-800">
+                                입금 받을 계좌 <span class="text-gray-300">(선택)</span>
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 text-blue-600 text-sm font-semibold">
+                            <span class="hidden sm:inline">자세히 입력하기</span>
+                            <i id="accountChevron" class="fas fa-chevron-down transition-transform duration-200"></i>
+                        </div>
+                    </button>
+                </div>
+                
+                <div 
+                    id="accountFieldsWrapper" 
+                    class="overflow-hidden transition-all duration-300 ease-in-out max-h-0 opacity-0"
+                    style="max-height: 0;"
+                    aria-hidden="true"
+                >
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">은행명</label>
+                            <select 
+                                id="bankNameSelect"
+                                class="w-full h-12 px-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-sm"
+                            >
+                                <option value="">선택</option>
+                                <option value="카카오뱅크">카카오뱅크</option>
+                                <option value="토스뱅크">토스뱅크</option>
+                                <option value="국민은행">국민은행</option>
+                                <option value="신한은행">신한은행</option>
+                                <option value="하나은행">하나은행</option>
+                                <option value="우리은행">우리은행</option>
+                                <option value="농협은행">농협은행</option>
+                                <option value="기업은행">기업은행</option>
+                                <option value="SC제일은행">SC제일은행</option>
+                                <option value="씨티은행">씨티은행</option>
+                                <option value="케이뱅크">케이뱅크</option>
+                                <option value="새마을금고">새마을금고</option>
+                                <option value="신협">신협</option>
+                                <option value="우체국">우체국</option>
+                                <option value="__custom__">기타 (직접입력)</option>
+                            </select>
+                            <input 
+                                type="text" 
+                                id="bankNameCustom"
+                                class="w-full h-12 px-3 border-2 border-blue-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-sm mt-2 hidden"
+                                placeholder="은행/금융기관명 입력"
+                            >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">계좌번호</label>
+                            <input 
+                                type="text" 
+                                inputmode="numeric"
+                                id="accountNumber"
+                                class="w-full h-12 px-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-sm"
+                                placeholder="숫자만 입력"
+                            >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">예금주</label>
+                            <input 
+                                type="text" 
+                                id="accountHolder"
+                                class="w-full h-12 px-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-sm"
+                                placeholder="예금주명"
+                            >
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <div class="notice-box">
+              이 계산기는 입력하신 값을 기준으로 한 <strong>참고용 시뮬레이션</strong>입니다.<br />
+              실제 소송·집행 결과와 다를 수 있으며, 최종 판단은 법률 전문가와 상의해 주세요.
+            </div>
+
+            <!-- 계산하기 버튼 -->
+            <button 
+                id="calculateBtn"
+                class="cta-btn w-full mt-6 h-16 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold text-lg rounded-2xl shadow-lg flex items-center justify-center gap-3"
+            >
+                <i class="fas fa-calculator"></i>
+                계산하기 & 문구 생성
+            </button>
+            
+            <!-- 유효성 검사 오류 메시지 -->
+            <p id="validationError" class="text-center text-red-500 text-sm mt-3 hidden">
+                <i class="fas fa-exclamation-circle mr-1"></i>
+                <span id="errorMessage"></span>
+            </p>
+            
+            <!-- 상황별 가이드 미니 배너 -->
+            <section class="mt-6 bg-white p-4 sm:p-5 rounded-2xl shadow-lg border border-gray-100">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">NEW</span>
+                    <h2 class="text-base sm:text-lg font-bold text-gray-800">상황별 미수금 가이드 10선</h2>
+                </div>
+                <p class="text-sm text-gray-600 keep-all mb-4">
+                    프리랜서, 친구·가족, 중고거래 등 상황별로 미수금 대응 흐름을 한눈에 정리했어요.
+                </p>
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <span class="text-sm text-gray-500">가이드를 읽고 바로 계산해 보세요.</span>
+                    <a class="cta-btn h-12 px-5 text-sm font-bold flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700" href="./public/index.html">
+                        가이드 보러가기
+                    </a>
+                </div>
+            </section>
+            
+            <!-- ========== 셀프 독촉 키트 티저 배너 ========== -->
+            <section class="w-full max-w-xl mx-auto mt-6 mb-2 rounded-2xl bg-slate-50 px-4 py-3 sm:px-5 sm:py-4 text-xs sm:text-sm text-gray-700 leading-relaxed">
+                <p class="font-semibold mb-2">
+                    🧰 셀프 독촉 실전 키트 <span class="text-slate-500 font-normal">(준비 중)</span>
+                </p>
+                <p class="keep-all mb-1">
+                    프리랜서·지인·거래처 미수금 정리를 돕는<br>
+                    내용증명 예시문, 체크리스트, 엑셀/노션 양식을 묶은 키트를 준비하고 있습니다.
+                </p>
+                <p class="keep-all text-gray-500">
+                    계산을 완료하신 뒤 결과 화면에서 알림 신청을 하실 수 있어요.
+                </p>
+            </section>
+            
+            <!-- 간단한 푸터 -->
+            <p class="text-center text-xs text-gray-400 mt-6">
+                <i class="fas fa-shield-alt mr-1"></i>
+                모든 데이터는 새로고침 시 즉시 삭제됩니다.
+            </p>
+        </div>
+    </div>
+    
+    <!-- ==================== [Page 2] 결과 화면 ==================== -->
+    <div id="resultPage" class="page hidden fade-out">
+        <div class="max-w-lg mx-auto px-4 pb-12">
+            
+            <!-- 결과 화면 헤더 -->
+            <header class="flex items-center justify-between py-6">
+                <button 
+                    id="backBtn"
+                    class="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors font-medium"
+                >
+                    <i class="fas fa-chevron-left"></i>
+                    <span>뒤로가기 (수정)</span>
+                </button>
+                <h2 class="text-lg font-bold text-gray-800">계산 결과</h2>
+                <div class="w-24"></div> <!-- 균형을 위한 빈 공간 -->
+            </header>
+            
+            <!-- 결과 요약 카드 -->
+            <section class="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-6 text-center shadow-lg">
+                <p class="text-gray-700 text-lg mb-4">
+                    총 <span id="daysElapsed" class="font-bold text-red-600">0</span>일 지났고,
+                    이자만 <span id="interestAmount" class="font-bold text-red-600">0</span>원 붙었습니다.
+                </p>
+                
+                <p class="text-sm text-gray-500 mb-2">지금 당장 받아야 할 돈</p>
+                <div class="result-amount">
+                    <p id="totalAmount" class="text-4xl sm:text-5xl font-black text-red-600 result-money counting px-2">
+                        0 원
+                    </p>
+                </div>
+                
+                <div class="mt-4 pt-4 border-t border-red-200">
+                    <p class="text-xs text-gray-500">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        매일 <span id="dailyInterest" class="font-semibold">0</span>원씩 불어나고 있습니다
+                    </p>
+                </div>
+            </section>
+
+            <div class="notice-box">
+              이 계산기는 입력하신 값을 기준으로 한 <strong>참고용 시뮬레이션</strong>입니다.<br />
+              실제 소송·집행 결과와 다를 수 있으며, 최종 판단은 법률 전문가와 상의해 주세요.
+            </div>
+            
+            <!-- 액션부 (탭) -->
+            <section class="mt-6 bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="flex border-b border-gray-200">
+                    <button class="tab-btn flex-1 py-4 text-sm font-semibold text-blue-600 border-b-2 border-blue-500" data-tab="kakao">
+                        <i class="fas fa-comment mr-1"></i> 카톡/문자
+                    </button>
+                    <button class="tab-btn flex-1 py-4 text-sm font-semibold text-gray-500 border-b-2 border-transparent hover:text-gray-700" data-tab="email">
+                        <i class="fas fa-envelope mr-1"></i> 이메일
+                    </button>
+                    <button class="tab-btn flex-1 py-4 text-sm font-semibold text-gray-500 border-b-2 border-transparent hover:text-gray-700" data-tab="certificate">
+                        <i class="fas fa-file-pdf mr-1"></i> 내용증명
+                    </button>
+                </div>
+                
+                <div class="p-6">
+                    <!-- 카톡/문자 탭 -->
+                    <div id="tab-kakao" class="tab-content active">
+                        <textarea 
+                            id="kakaoText"
+                            class="w-full h-72 p-4 text-sm border-2 border-gray-200 rounded-xl resize-none focus:border-yellow-400 focus:ring-4 focus:ring-yellow-100 outline-none leading-relaxed"
+                            readonly
+                        ></textarea>
+                        <button 
+                            id="copyKakao"
+                            class="w-full mt-4 h-14 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                        >
+                            <i class="fas fa-copy"></i>
+                            텍스트 전체 복사하기
+                        </button>
+                    </div>
+                    
+                    <!-- 이메일 탭 -->
+                    <div id="tab-email" class="tab-content">
+                        <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+                            <p class="text-sm font-semibold text-blue-800">
+                                <i class="fas fa-envelope mr-1"></i>
+                                제목: <span id="emailSubject"></span>
+                            </p>
+                        </div>
+                        <textarea 
+                            id="emailText"
+                            class="w-full h-64 p-4 text-sm border-2 border-gray-200 rounded-xl resize-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 outline-none leading-relaxed"
+                            readonly
+                        ></textarea>
+                        <button 
+                            id="copyEmail"
+                            class="w-full mt-4 h-14 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                        >
+                            <i class="fas fa-copy"></i>
+                            텍스트 전체 복사하기
+                        </button>
+                    </div>
+                    
+                    <!-- 내용증명 탭 -->
+                    <div id="tab-certificate" class="tab-content">
+                        <div id="certificatePreview" class="certificate-preview bg-white border-2 border-gray-300 p-8 text-sm leading-relaxed overflow-y-auto rounded-sm">
+                        </div>
+                        <button 
+                            id="downloadPdf"
+                            class="w-full mt-4 h-14 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                        >
+                            <i class="fas fa-file-pdf"></i>
+                            PDF로 예쁘게 출력하기
+                        </button>
+                        <p class="mt-2 text-xs text-gray-500 leading-relaxed keep-all">
+                            내용을 많이 수정하고 싶다면 위 텍스트를 워드/한글에 붙여넣고 편집 후 PDF로 저장하는 걸 추천드려요.
+                        </p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- ========== 셀프 독촉 실전 키트 안내 박스 ========== -->
+            <section class="w-full max-w-xl mx-auto mt-6 mb-4 rounded-2xl bg-indigo-50 px-4 py-5 sm:px-6 sm:py-6 shadow-sm">
+                <!-- 제목 -->
+                <div class="mb-4">
+                    <p class="text-sm sm:text-base text-gray-600 keep-all">변호사 없이도 미수금 정리를 준비하는</p>
+                    <p class="text-base sm:text-lg font-bold text-gray-800 keep-all">
+                        <span class="text-2xl mr-1">🧰</span>'셀프 독촉 실전 키트' <span class="text-indigo-500 text-sm font-medium">(준비 중)</span>
+                    </p>
+                </div>
+                
+                <!-- Bullet 리스트 -->
+                <ul class="text-sm sm:text-base text-gray-600 space-y-2 mb-4 pl-1">
+                    <li class="flex items-start gap-2">
+                        <i class="fas fa-check-circle text-indigo-500 mt-0.5 flex-shrink-0"></i>
+                        <span class="keep-all">상황별 내용증명 예시문 (프리랜서 / 지인 / 거래처 등)</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fas fa-check-circle text-indigo-500 mt-0.5 flex-shrink-0"></i>
+                        <span class="keep-all">우체국 내용증명 발송 체크리스트</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fas fa-check-circle text-indigo-500 mt-0.5 flex-shrink-0"></i>
+                        <span class="keep-all">지급명령·소액소송 준비용 엑셀/노션 양식</span>
+                    </li>
+                </ul>
+                
+                <!-- 키트 설명 문단 -->
+                <p class="mt-3 text-sm text-gray-700 leading-relaxed keep-all">
+                    한 번만 정리해두면, 앞으로 생길 미수금도<br>
+                    같은 양식·체크리스트로 바로 처리할 수 있어요.<br><br>
+                    법 검색·양식 찾느라 몇 시간씩 구글링하던 시간을<br>
+                    한 번에 줄여주는 걸 목표로 만든 키트입니다.
+                </p>
+                
+                <!-- 가격 및 혜택 안내 -->
+                <div class="bg-white/60 rounded-lg p-3 mb-4">
+                    <p class="text-xs sm:text-sm text-gray-500 mb-1 keep-all">
+                        예상 가격: <span class="font-semibold text-gray-700">19,000원</span> 내외
+                    </p>
+                    <p class="text-xs sm:text-sm text-gray-500 keep-all">
+                        키트가 완성되면 가장 먼저 알려드리고,<br>
+                        초기 알림 신청자 분들께는 <span class="font-semibold text-indigo-600">할인 쿠폰</span>을 드립니다.
+                    </p>
+                </div>
+                
+                <!-- 알림 신청 버튼 -->
+                <a 
+                    href="https://forms.gle/LVU4ZkpqPU6aVzHdA" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    class="w-full mt-4 h-12 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-semibold flex items-center justify-center gap-2 transition-all"
+                >
+                    🔔 키트 알림 신청하기
+                </a>
+                
+                <!-- 면책 조항 -->
+                    <p class="text-xs text-gray-500 mt-3 text-center keep-all">
+                    ※ 이 키트는 법률 자문이나 소송 대리를 제공하지 않으며,<br>
+                    실제 법적 조치 전에는 법률 전문가와 상의해 대응 절차를 결정해 주세요.
+                </p>
+            </section>
+            
+            <!-- 푸터 -->
+            <footer class="mt-12 text-center">
+                <div class="mb-8">
+                    <button 
+                        id="openDonationModal"
+                        class="donation-btn inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-yellow-400 via-orange-400 to-orange-500 text-white font-bold text-lg rounded-full shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border-none"
+                    >
+                        <span class="text-2xl">🎁</span>
+                        수수료 대신 박카스 한 병 쏘기 (클릭)
+                    </button>
+                    <p class="mt-3 text-xs text-gray-400">
+                        이 서비스가 마음에 드셨다면 개발자에게 응원을 보내주세요!
+                    </p>
+                </div>
+                
+                <p class="text-xs text-gray-400 mb-4">
+                    <i class="fas fa-shield-alt mr-1"></i>
+                    모든 데이터는 새로고침 시 즉시 삭제됩니다.
+                </p>
+                
+                <div class="pt-6 border-t border-gray-200">
+                    <p class="text-xs font-semibold text-gray-500 mb-3">
+                        <i class="fas fa-gavel mr-1"></i>
+                        [법적 고지 및 면책 조항]
+                    </p>
+                    <div class="text-xs text-gray-400 space-y-1 leading-relaxed">
+                        <p>본 서비스는 법률 전문가가 아니며, 제공되는 결과물은 단순 참고용 예시입니다.</p>
+                        <p>생성된 문서의 내용과 발송에 따른 모든 법적 책임은 사용자 본인에게 있습니다.</p>
+                        <p>본 서비스는 입력된 개인정보를 서버에 저장하지 않습니다.</p>
+                        <p>이자율 계산은 상법 및 소송촉진법 등을 참고하였으나, 실제 판결과는 다를 수 있습니다.</p>
+                        <p class="text-gray-500">※ 본 서비스는 일반 정보 제공 및 계산 예시일 뿐, 개별 사건에 대한 법률 자문이 아닙니다. 실제 대응은 법률 전문가와 상의해 절차를 결정해 주세요.</p>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- ==================== 후원 QR 모달 ==================== -->
+    <div id="donationModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">🙏 개발자 후원하기</h3>
+            <p class="text-sm text-gray-500 mb-6">카메라로 찍으면 바로 송금됩니다!</p>
+            
+            <div class="flex justify-center mb-6">
+                <img 
+                    src="./qr.png" 
+                    alt="후원 QR코드" 
+                    class="w-48 h-48 rounded-lg shadow-md border border-gray-200"
+                >
+            </div>
+            
+            <button 
+                id="copyDonationAccount"
+                class="w-full py-3 bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold rounded-xl transition-all text-sm"
+            >
+                <i class="fas fa-copy mr-1"></i>
+                또는 계좌 복사: 카카오뱅크 3333-14-6086486
+            </button>
+            
+            <button 
+                id="closeDonationModal"
+                class="w-full mt-3 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold rounded-xl transition-all text-sm"
+            >
+                닫기
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== JavaScript ==================== -->
+    <script>
+        // ========== 전역 상태 ==========
+        // [수정2] 발신인 정보 3개 필드 추가
+        let state = {
+            // 채권 정보
+            principal: 0,
+            startDate: null,
+            interestRate: 6,
+            // 채무자 정보
+            debtorName: '',
+            debtorType: 'company',
+            // 발신인 정보 (신규)
+            senderName: '',
+            senderAddress: '',
+            senderPhone: '',
+            // 입금 계좌 정보
+            bankName: '',
+            accountNumber: '',
+            accountHolder: ''
+        };
+        
+        let previousTotal = 0;
+
+        // ========== DOM 요소 ==========
+        const elements = {
+            // 페이지
+            inputPage: document.getElementById('inputPage'),
+            resultPage: document.getElementById('resultPage'),
+            // 입력 필드 - 채권
+            principal: document.getElementById('principal'),
+            startDate: document.getElementById('startDate'),
+            customRateRadio: document.getElementById('customRateRadio'),
+            customRateWrapper: document.getElementById('customRateWrapper'),
+            customRate: document.getElementById('customRate'),
+            rateWarning: document.getElementById('rateWarning'),
+            // 입력 필드 - 채무자
+            debtorName: document.getElementById('debtorName'),
+            debtorType: document.getElementById('debtorType'),
+            // 입력 필드 - 발신인 (신규)
+            senderName: document.getElementById('senderName'),
+            senderAddress: document.getElementById('senderAddress'),
+            senderPhone: document.getElementById('senderPhone'),
+            // 입력 필드 - 계좌
+            bankNameSelect: document.getElementById('bankNameSelect'),
+            bankNameCustom: document.getElementById('bankNameCustom'),
+            accountNumber: document.getElementById('accountNumber'),
+            accountHolder: document.getElementById('accountHolder'),
+            accountAccordionToggle: document.getElementById('accountAccordionToggle'),
+            accountFieldsWrapper: document.getElementById('accountFieldsWrapper'),
+            accountChevron: document.getElementById('accountChevron'),
+            // 버튼
+            calculateBtn: document.getElementById('calculateBtn'),
+            backBtn: document.getElementById('backBtn'),
+            // 유효성 검사
+            validationError: document.getElementById('validationError'),
+            errorMessage: document.getElementById('errorMessage'),
+            // 결과부
+            daysElapsed: document.getElementById('daysElapsed'),
+            interestAmount: document.getElementById('interestAmount'),
+            totalAmount: document.getElementById('totalAmount'),
+            dailyInterest: document.getElementById('dailyInterest'),
+            // 탭 콘텐츠
+            kakaoText: document.getElementById('kakaoText'),
+            emailSubject: document.getElementById('emailSubject'),
+            emailText: document.getElementById('emailText'),
+            certificatePreview: document.getElementById('certificatePreview'),
+            // 복사/다운로드 버튼
+            copyKakao: document.getElementById('copyKakao'),
+            copyEmail: document.getElementById('copyEmail'),
+            downloadPdf: document.getElementById('downloadPdf'),
+            // 모달 요소
+            donationModal: document.getElementById('donationModal'),
+            openDonationModal: document.getElementById('openDonationModal'),
+            closeDonationModal: document.getElementById('closeDonationModal'),
+            copyDonationAccount: document.getElementById('copyDonationAccount')
+        };
+
+        // ========== 유틸리티 함수 ==========
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        }
+
+        function parseNumber(str) {
+            return parseInt(str.replace(/,/g, ''), 10) || 0;
+        }
+
+        function formatDate(date) {
+            if (!date) return '';
+            const d = new Date(date);
+            return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+        }
+
+        function getTodayFormatted() {
+            const today = new Date();
+            return `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+        }
+
+        function calculateDays(startDate) {
+            if (!startDate) return 0;
+            const start = new Date(startDate);
+            const today = new Date();
+            start.setHours(0, 0, 0, 0);
+            today.setHours(0, 0, 0, 0);
+            const diffTime = today - start;
+            return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+        }
+
+        function calculateInterest(principal, days, rate) {
+            return Math.floor(principal * (rate / 100) * (days / 365));
+        }
+        
+        function animateCount(element, start, end, duration = 800) {
+            const startTime = performance.now();
+            const diff = end - start;
+            
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = 1 - Math.pow(1 - progress, 4);
+                const current = Math.floor(start + diff * easeProgress);
+                element.textContent = `${formatNumber(current)} 원`;
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                }
+            }
+            requestAnimationFrame(update);
+        }
+        
+        // 입금 계좌 정보 텍스트 생성
+        function getAccountInfoText() {
+            const { bankName, accountNumber, accountHolder } = state;
+            if (bankName && accountNumber && accountHolder) {
+                return `\n\n▶ 입금 계좌: ${bankName} ${accountNumber} (예금주: ${accountHolder})`;
+            }
+            return '';
+        }
+        
+        // [수정4] 발신인 정보 텍스트 생성 (카톡/이메일용)
+        function getSenderInfoText() {
+            const { senderName, senderPhone } = state;
+            if (senderName) {
+                if (senderPhone) {
+                    return `\n\n발신인: ${senderName} / ${senderPhone}`;
+                }
+                return `\n\n발신인: ${senderName}`;
+            }
+            return '';
+        }
+        
+        function getHonorific() {
+            return state.debtorType === 'company' ? '귀사' : '귀하';
+        }
+        
+        function getGreeting() {
+            return state.debtorType === 'company' 
+                ? '귀사(귀하)의 무궁한 발전을 기원합니다.'
+                : '귀하의 가정에 평안이 깃들기를 기원합니다.';
+        }
+
+        // ========== 페이지 전환 함수 ==========
+        function showResultPage() {
+            elements.inputPage.classList.add('fade-out');
+            elements.inputPage.classList.remove('fade-in');
+            
+            setTimeout(() => {
+                elements.inputPage.classList.add('hidden');
+                elements.resultPage.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    elements.resultPage.classList.remove('fade-out');
+                    elements.resultPage.classList.add('fade-in');
+                }, 50);
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 400);
+        }
+        
+        function showInputPage() {
+            elements.resultPage.classList.add('fade-out');
+            elements.resultPage.classList.remove('fade-in');
+            
+            setTimeout(() => {
+                elements.resultPage.classList.add('hidden');
+                elements.inputPage.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    elements.inputPage.classList.remove('fade-out');
+                    elements.inputPage.classList.add('fade-in');
+                }, 50);
+                
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 400);
+        }
+
+        // ========== 데이터 수집 및 유효성 검사 ==========
+        // [수정2] collectData에 발신인 정보 추가
+        function collectData() {
+            // 채권 정보
+            state.principal = parseNumber(elements.principal.value);
+            state.startDate = elements.startDate.value;
+            // 채무자 정보
+            state.debtorName = elements.debtorName.value;
+            // 발신인 정보 (신규)
+            state.senderName = elements.senderName.value.trim();
+            state.senderAddress = elements.senderAddress.value.trim();
+            state.senderPhone = elements.senderPhone.value.trim();
+            // 계좌 정보
+            state.bankName = elements.bankNameSelect.value === '__custom__' 
+                ? elements.bankNameCustom.value 
+                : elements.bankNameSelect.value;
+            state.accountNumber = elements.accountNumber.value;
+            state.accountHolder = elements.accountHolder.value;
+        }
+        
+        function validateData() {
+            if (state.principal <= 0) {
+                showError('원금을 입력해주세요.');
+                return false;
+            }
+            if (!state.startDate) {
+                showError('날짜를 선택해주세요.');
+                return false;
+            }
+            hideError();
+            return true;
+        }
+        
+        function showError(message) {
+            elements.errorMessage.textContent = message;
+            elements.validationError.classList.remove('hidden');
+        }
+        
+        function hideError() {
+            elements.validationError.classList.add('hidden');
+        }
+
+        // ========== 이벤트 핸들러 ==========
+        
+        // 원금 입력 (콤마 자동 삽입)
+        elements.principal.addEventListener('input', (e) => {
+            const value = e.target.value.replace(/[^\d]/g, '');
+            e.target.value = value ? formatNumber(value) : '';
+        });
+
+        // 이자율 라디오 버튼
+        document.querySelectorAll('input[name="interestRate"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.value === 'custom') {
+                    elements.customRateWrapper.classList.remove('hidden');
+                    state.interestRate = parseFloat(elements.customRate.value) || 0;
+                } else {
+                    elements.customRateWrapper.classList.add('hidden');
+                    elements.rateWarning.classList.add('hidden');
+                    state.interestRate = parseFloat(e.target.value);
+                }
+            });
+        });
+
+        // 직접 입력 이자율 - 20% 제한
+        elements.customRate.addEventListener('input', (e) => {
+            let value = parseFloat(e.target.value) || 0;
+            if (value > 20) {
+                value = 20;
+                e.target.value = 20;
+                elements.rateWarning.classList.remove('hidden');
+            } else {
+                elements.rateWarning.classList.add('hidden');
+            }
+            state.interestRate = value;
+        });
+        
+        // 세그먼트 컨트롤 이벤트
+        document.querySelectorAll('.segment-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.debtorType = btn.dataset.type;
+                elements.debtorType.value = btn.dataset.type;
+            });
+        });
+        
+        // 은행 선택
+        elements.bankNameSelect.addEventListener('change', (e) => {
+            if (e.target.value === '__custom__') {
+                elements.bankNameCustom.classList.remove('hidden');
+                elements.bankNameCustom.focus();
+            } else {
+                elements.bankNameCustom.classList.add('hidden');
+            }
+            if (isAccountOpen) {
+                elements.accountFieldsWrapper.style.maxHeight = `${elements.accountFieldsWrapper.scrollHeight}px`;
+            }
+        });
+        
+        // 계좌번호 입력 (숫자/하이픈만)
+        elements.accountNumber.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^\d-]/g, '');
+        });
+        
+        // 전화번호 입력 (숫자/하이픈만)
+        elements.senderPhone.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^\d-]/g, '');
+        });
+
+        // 계좌 아코디언
+        let isAccountOpen = false;
+        function setAccountOpen(open) {
+            isAccountOpen = open;
+            const wrapper = elements.accountFieldsWrapper;
+            const chevron = elements.accountChevron;
+            const toggle = elements.accountAccordionToggle;
+            if (open) {
+                wrapper.style.maxHeight = `${wrapper.scrollHeight}px`;
+                wrapper.classList.remove('opacity-0');
+                wrapper.classList.add('opacity-100');
+                chevron.classList.add('rotate-180');
+                toggle.classList.add('border-blue-200', 'bg-blue-50');
+                toggle.setAttribute('aria-expanded', 'true');
+                wrapper.setAttribute('aria-hidden', 'false');
+            } else {
+                wrapper.style.maxHeight = '0px';
+                wrapper.classList.remove('opacity-100');
+                wrapper.classList.add('opacity-0');
+                chevron.classList.remove('rotate-180');
+                toggle.classList.remove('border-blue-200', 'bg-blue-50');
+                toggle.setAttribute('aria-expanded', 'false');
+                wrapper.setAttribute('aria-hidden', 'true');
+            }
+        }
+        elements.accountAccordionToggle.addEventListener('click', () => {
+            setAccountOpen(!isAccountOpen);
+        });
+        window.addEventListener('resize', () => {
+            if (isAccountOpen) {
+                elements.accountFieldsWrapper.style.maxHeight = `${elements.accountFieldsWrapper.scrollHeight}px`;
+            }
+        });
+
+        // 계산하기 버튼 클릭
+        elements.calculateBtn.addEventListener('click', () => {
+            collectData();
+            
+            if (!validateData()) {
+                return;
+            }
+            
+            // 이자율 수집
+            const selectedRate = document.querySelector('input[name="interestRate"]:checked');
+            if (selectedRate.value === 'custom') {
+                state.interestRate = parseFloat(elements.customRate.value) || 0;
+            } else {
+                state.interestRate = parseFloat(selectedRate.value);
+            }
+            
+            // 결과 계산 및 업데이트
+            updateResult();
+            
+            // 결과 페이지로 전환
+            showResultPage();
+        });
+        
+        // 뒤로가기 버튼
+        elements.backBtn.addEventListener('click', () => {
+            showInputPage();
+        });
+
+        // 탭 전환
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabId = btn.dataset.tab;
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('text-blue-600', 'border-blue-500');
+                    b.classList.add('text-gray-500', 'border-transparent');
+                });
+                btn.classList.remove('text-gray-500', 'border-transparent');
+                btn.classList.add('text-blue-600', 'border-blue-500');
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                document.getElementById(`tab-${tabId}`).classList.add('active');
+            });
+        });
+
+        // 복사 버튼들
+        elements.copyKakao.addEventListener('click', () => {
+            copyToClipboard(elements.kakaoText.value, elements.copyKakao);
+        });
+
+        elements.copyEmail.addEventListener('click', () => {
+            const fullText = `제목: ${elements.emailSubject.textContent}\n\n${elements.emailText.value}`;
+            copyToClipboard(fullText, elements.copyEmail);
+        });
+
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalHTML = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check"></i> 복사 완료!';
+                button.classList.add('copy-success');
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                    button.classList.remove('copy-success');
+                }, 2000);
+            });
+        }
+
+        // PDF 다운로드 (디버그: 미리보기 + html2canvas → jsPDF 직접 저장)
+        elements.downloadPdf.addEventListener('click', () => {
+            const source = elements.certificatePreview;
+            const debtorName = state.debtorName || '채무자';
+
+            // 클론 생성
+            const clone = source.cloneNode(true);
+            // 오프스크린 래퍼
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'absolute';
+            wrapper.style.left = '-9999px';
+            wrapper.style.top = '0';
+            wrapper.style.background = 'white';
+            wrapper.style.padding = '0';
+            wrapper.style.margin = '0';
+            wrapper.style.width = '794px'; // A4 @96dpi
+            wrapper.style.boxSizing = 'border-box';
+
+            // 클론 스타일 조정 (스크롤/트랜스폼/쉐도우 제거)
+            clone.style.maxHeight = 'none';
+            clone.style.overflow = 'visible';
+            clone.style.transform = 'none';
+            clone.style.boxShadow = 'none';
+            clone.style.width = '100%';
+            clone.style.position = 'relative';
+            clone.style.left = '0';
+            clone.style.top = '0';
+
+            wrapper.appendChild(clone);
+            document.body.appendChild(wrapper);
+
+            // 디버그 로그: 크기/내용 확인
+            console.log('PDF wrapper element:', wrapper);
+            console.log('wrapper offsetWidth/offsetHeight:', wrapper.offsetWidth, wrapper.offsetHeight);
+            console.log('wrapper scrollWidth/scrollHeight:', wrapper.scrollWidth, wrapper.scrollHeight);
+            console.log('wrapper innerHTML snippet:', wrapper.innerHTML.slice(0, 200));
+
+            // html2canvas로 캡처 후: 우하단 미리보기 + jsPDF에 직접 addImage 저장
+            // html2canvas로 캡처 후: 우하단 미리보기 + jsPDF에 직접 addImage 저장
+            const { jsPDF } = window.jspdf || {};
+            if (!jsPDF) {
+                console.error('jsPDF not loaded');
+                document.body.removeChild(wrapper);
+                return;
+            }
+
+            html2canvas(wrapper, {
+                scale: 2,
+                useCORS: true,
+                windowWidth: wrapper.scrollWidth,
+                windowHeight: wrapper.scrollHeight
+            }).then((canvas) => {
+                // 미리보기: 우하단에 작은 썸네일 표시
+                const preview = document.createElement('div');
+                preview.style.position = 'fixed';
+                preview.style.right = '10px';
+                preview.style.bottom = '10px';
+                preview.style.zIndex = '9999';
+                preview.style.padding = '6px';
+                preview.style.background = 'rgba(0,0,0,0.6)';
+                preview.style.borderRadius = '8px';
+                preview.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
+                const img = document.createElement('img');
+                img.src = canvas.toDataURL('image/png');
+                img.style.maxWidth = '200px';
+                img.style.maxHeight = '200px';
+                img.style.display = 'block';
+                preview.appendChild(img);
+                document.body.appendChild(preview);
+
+                // jsPDF로 직접 저장 (페이지 1장에 꽉 차게)
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgData = canvas.toDataURL('image/png');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`내용증명_${debtorName}_${new Date().toISOString().slice(0,10)}.pdf`);
+
+                document.body.removeChild(wrapper);
+                // 미리보기는 5초 뒤 제거
+                setTimeout(() => {
+                    if (preview && preview.parentNode) preview.parentNode.removeChild(preview);
+                }, 5000);
+            }).catch((err) => {
+                console.error('html2canvas capture failed:', err);
+                document.body.removeChild(wrapper);
+            });
+        });
+        
+        // 모달 이벤트
+        elements.openDonationModal.addEventListener('click', () => {
+            elements.donationModal.classList.add('active');
+        });
+        
+        elements.closeDonationModal.addEventListener('click', () => {
+            elements.donationModal.classList.remove('active');
+        });
+        
+        elements.donationModal.addEventListener('click', (e) => {
+            if (e.target === elements.donationModal) {
+                elements.donationModal.classList.remove('active');
+            }
+        });
+        
+        // 후원 계좌 복사
+        elements.copyDonationAccount.addEventListener('click', () => {
+            copyToClipboard('3333-14-6086486', elements.copyDonationAccount);
+            elements.copyDonationAccount.innerHTML = '<i class="fas fa-check"></i> 복사 완료!';
+            setTimeout(() => {
+                elements.copyDonationAccount.innerHTML = '<i class="fas fa-copy mr-1"></i>또는 계좌 복사: 카카오뱅크 3333-14-6086486';
+            }, 2000);
+        });
+
+        // ========== 결과 업데이트 ==========
+        function updateResult() {
+            const { principal, startDate, interestRate, debtorName } = state;
+            
+            const days = calculateDays(startDate);
+            const interest = calculateInterest(principal, days, interestRate);
+            const total = principal + interest;
+            const dailyInterest = Math.floor(principal * (interestRate / 100) / 365);
+            
+            elements.daysElapsed.textContent = formatNumber(days);
+            elements.interestAmount.textContent = formatNumber(interest);
+            elements.dailyInterest.textContent = formatNumber(dailyInterest);
+            
+            // 카운팅 애니메이션
+            animateCount(elements.totalAmount, 0, total);
+            previousTotal = total;
+            
+            updateTemplates({
+                name: debtorName || '고객',
+                date: formatDate(startDate),
+                days: formatNumber(days),
+                amount: formatNumber(principal),
+                rate: interestRate,
+                interest: formatNumber(interest),
+                total: formatNumber(total)
+            });
+        }
+
+        function updateTemplates(data) {
+            const accountInfo = getAccountInfoText();
+            const senderInfo = getSenderInfoText(); // [수정4] 발신인 정보
+            const honorific = getHonorific();
+            const greeting = getGreeting();
+            
+            // ========== 카톡/문자 템플릿 ==========
+            // [수정4] 발신인 정보 추가
+            elements.kakaoText.value = `[입금 요청]
+
+${data.name}님, 연락이 없으셔서 다시 보냅니다.
+
+${data.date} 지급일로부터 벌써 ${data.days}일이 지났네요. 😅
+
+
+원금 ${data.amount}원에 법적 이자(${data.rate}%)까지 더하면
+
+지금 입금하셔야 할 금액은 총 [${data.total}원]입니다.
+
+
+더 늦어지면 서로 얼굴 붉히게 될까 걱정입니다.
+
+오늘 중으로 입금 부탁드립니다. 🙏${accountInfo}${senderInfo}`;
+
+            // ========== 이메일 템플릿 ==========
+            // [수정4] 발신인 정보 추가
+            elements.emailSubject.textContent = `[독촉] ${data.name} 미지급 대금(${data.total}원) 입금 요청`;
+            elements.emailText.value = `수신: ${data.name}
+
+1. ${greeting}
+
+2. ${data.date} 지급 기일이 경과한 미수금에 대해 통지합니다.
+
+현재 상법상 지연이자(연 ${data.rate}%)가 매일 가산되고 있습니다.
+
+- 원금: ${data.amount}원
+- 경과이자: ${data.interest}원 (${data.days}일 누적)
+- 총 청구액: ${data.total}원
+
+법적 절차로 넘어가기 전에, ${data.amount}원이라도 우선 입금해주시면
+이자 부분은 협의해 볼 의향이 있습니다.
+
+회신 바랍니다.${accountInfo}${senderInfo}`;
+
+            // ========== 입금 계좌 HTML ==========
+            const accountInfoHtml = state.bankName && state.accountNumber && state.accountHolder
+                ? `<p style="margin: 5px 0 0 0; font-weight: bold;">${state.bankName} ${state.accountNumber}</p>
+                   <p style="margin: 5px 0 0 0;">예금주: ${state.accountHolder}</p>`
+                : `<p style="margin: 5px 0 0 0;">(은행명 / 계좌번호 / 예금주 기재)</p>`;
+
+            // ========== [수정3] 발신인 정보 HTML (내용증명용) ==========
+            // 발신인 이름/주소가 있으면 표시, 없으면 안내 문구
+            let senderInfoHtml = '';
+            if (state.senderName || state.senderAddress) {
+                // 발신인 이름
+                const nameHtml = state.senderName 
+                    ? `<span style="font-weight: bold;">${state.senderName}</span>` 
+                    : '(성명 기재)';
+                
+                // 발신인 주소
+                const addressHtml = state.senderAddress 
+                    ? `<br>${state.senderAddress}` 
+                    : '<br>(주소 기재)';
+                
+                // 연락처 (있을 때만)
+                const phoneHtml = state.senderPhone 
+                    ? `<br>연락처: ${state.senderPhone}` 
+                    : '';
+                
+                senderInfoHtml = `${nameHtml}${addressHtml}${phoneHtml}`;
+            } else {
+                // [수정5] 둘 다 비어있으면 안내 문구
+                senderInfoHtml = '(발신인 성명/주소를 기재해 주세요)';
+            }
+            
+            // 내용증명 하단 발신인 영역용
+            const senderSignatureHtml = state.senderName 
+                ? `발신인: ${state.senderName} (인)` 
+                : '발신인: ___________________ (인)';
+            
+            const senderPhoneSignatureHtml = state.senderPhone 
+                ? `연락처: ${state.senderPhone}` 
+                : '연락처: ___________________';
+
+            // ========== 내용증명 템플릿 ==========
+            elements.certificatePreview.innerHTML = `
+                <div style="font-family: 'Pretendard', sans-serif; line-height: 1.8;">
+                    <h1 style="text-align: center; font-size: 24px; font-weight: bold; text-decoration: underline; margin-bottom: 30px;">
+                        내 용 증 명
+                    </h1>
+                    
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 14px;">
+                        <tr>
+                            <td style="border: 1px solid #333; padding: 10px; width: 80px; font-weight: bold; background: #f5f5f5;">발 신 인</td>
+                            <td style="border: 1px solid #333; padding: 10px;">${senderInfoHtml}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #333; padding: 10px; font-weight: bold; background: #f5f5f5;">수 신 인</td>
+                            <td style="border: 1px solid #333; padding: 10px;">${data.name}</td>
+                        </tr>
+                    </table>
+                    
+                    <h2 style="font-size: 16px; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 5px;">
+                        제 목: 미수금 지급 청구서
+                    </h2>
+                    
+                    <div style="font-size: 14px; text-align: justify;">
+                        <p style="margin-bottom: 15px;">
+                            1. ${greeting}
+                        </p>
+                        
+                        <p style="margin-bottom: 15px;">
+                            2. 본인은 ${honorific}에 대하여 아래와 같은 채권을 보유하고 있으나, 
+                            ${data.date} 변제기가 도래하였음에도 불구하고 현재까지 변제를 이행하지 않고 계십니다.
+                        </p>
+                        
+                        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+                            <tr>
+                                <td style="border: 1px solid #333; padding: 10px; width: 120px; font-weight: bold; background: #f5f5f5;">채권 원금</td>
+                                <td style="border: 1px solid #333; padding: 10px; text-align: right; font-weight: bold;">${data.amount}원</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #333; padding: 10px; font-weight: bold; background: #f5f5f5;">지연이자</td>
+                                <td style="border: 1px solid #333; padding: 10px; text-align: right;">${data.interest}원 (연 ${data.rate}%, ${data.days}일)</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #333; padding: 10px; font-weight: bold; background: #fee2e2;">청구 총액</td>
+                                <td style="border: 1px solid #333; padding: 10px; text-align: right; font-weight: bold; color: #dc2626; font-size: 16px;">${data.total}원</td>
+                            </tr>
+                        </table>
+                        
+                        <p style="margin-bottom: 15px;">
+                            3. 이에 상법 제54조에 의거하여 연 ${data.rate}%의 법정이자를 가산하여 청구하오니,<br>
+                            본 내용증명 수령일로부터 <strong>7일 이내</strong>에 위 금원 전액을 아래 계좌로 입금하여 주시기 바랍니다.
+                        </p>
+                        
+                        <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                            <p style="margin: 0; font-weight: bold;">▶ 입금 계좌</p>
+                            ${accountInfoHtml}
+                        </div>
+                        
+                        <p style="margin-bottom: 15px; color: #dc2626; font-weight: bold;">
+                            4. 만일 위 기한 내에 이행하지 않을 경우,<br>
+                            민사소송 제기 및 재산에 대한 가압류/강제집행 등 법적 절차를 진행할 것이며,<br>
+                            이로 인해 발생하는 소송비용 일체는 ${honorific}가 부담하게 됨을 알려드립니다.
+                        </p>
+                        
+                        <p style="margin-bottom: 30px;">
+                            5. 본 서면은 추후 법적 절차 진행 시 증거자료로 활용될 예정입니다.<br>
+                            원만한 해결을 위해 조속한 연락 바랍니다.
+                        </p>
+                    </div>
+                    
+                    <div style="text-align: right; margin-top: 50px; font-size: 14px;">
+                        <p style="margin-bottom: 30px;">${getTodayFormatted()}</p>
+                        <p style="margin-bottom: 5px;">${senderSignatureHtml}</p>
+                        <p>${senderPhoneSignatureHtml}</p>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+"""
+renderer.py
+
+템플릿 HTML에 콘텐츠 딕셔너리를 주입해 pSEO 랜딩 페이지를 생성합니다.
+OpenAI 호출은 포함하지 않으며, 파일 입출력은 템플릿 로드/결과 저장만 수행합니다.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict
+
+TEMPLATE_PATH = Path("public") / "template_landing.html"
+OUTPUT_DIR = Path("public")
+
+
+def load_template() -> str:
+    """템플릿 파일을 읽어 문자열로 반환합니다."""
+    return TEMPLATE_PATH.read_text(encoding="utf-8")
+
+
+def _build_replacements(content: Dict[str, Any]) -> Dict[str, str]:
+    """콘텐츠 딕셔너리에서 템플릿 치환용 맵을 생성합니다."""
+    page_meta = content.get("page_meta", {}) or {}
+    hero = content.get("hero_section", {}) or {}
+    situation = content.get("situation_analysis", {}) or {}
+    action = content.get("action_guide", {}) or {}
+    faq_list = content.get("faq_section", []) or []
+    legal = content.get("legal_safety", {}) or {}
+
+    # FAQ 최대 3개까지만 기본 매핑
+    faq_map: Dict[str, str] = {}
+    for idx in range(3):
+        q_key = f"FAQ{idx+1}_Q"
+        a_key = f"FAQ{idx+1}_A"
+        if idx < len(faq_list):
+            faq_map[q_key] = faq_list[idx].get("question", "")
+            faq_map[a_key] = faq_list[idx].get("answer", "")
+        else:
+            faq_map[q_key] = ""
+            faq_map[a_key] = ""
+
+    replacements = {
+        "TITLE": page_meta.get("title", ""),
+        "DESCRIPTION": page_meta.get("description", ""),
+        "KEYWORDS": page_meta.get("keywords", ""),
+        "H1": hero.get("headline", ""),
+        "INTRO": hero.get("intro_copy", ""),
+        "PAIN_POINT": situation.get("pain_summary", ""),
+        "ACTION_STEPS": action.get("guidance", ""),
+        "LEGAL_DISCLAIMER": legal.get("disclaimer", ""),
+        **faq_map,
+    }
+    return replacements
+
+
+def render_landing_html(template_html: str, content: Dict[str, Any]) -> str:
+    """
+    템플릿 문자열과 콘텐츠 딕셔너리를 받아 플레이스홀더를 치환한 HTML을 반환합니다.
+    순수 문자열 처리만 수행합니다.
+    """
+    replacements = _build_replacements(content)
+    rendered = template_html
+    for key, value in replacements.items():
+        rendered = rendered.replace(f"{{{{{key}}}}}", value)
+    return rendered
+
+
+def save_landing_html(slug: str, html: str) -> None:
+    """렌더링된 HTML을 public/{slug}.html에 저장합니다."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUT_DIR / f"{slug}.html"
+    out_path.write_text(html, encoding="utf-8")
+
+
+def generate_and_save_landing(content: Dict[str, Any]) -> None:
+    """
+    content["page_meta"]["slug"]를 사용해 템플릿을 렌더링 후 저장합니다.
+    """
+    slug = (content.get("page_meta") or {}).get("slug")
+    if not slug:
+        raise ValueError("content.page_meta.slug 가 필요합니다.")
+
+    template_html = load_template()
+    final_html = render_landing_html(template_html, content)
+    save_landing_html(slug, final_html)
+

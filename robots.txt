@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gentle-yeot-a0c73f.netlify.app/sitemap.xml
+
