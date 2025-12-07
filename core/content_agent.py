@@ -123,27 +123,34 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
         safety_result = safety.review_content(joined)
         safety_status = safety_result.get("status")
 
-        if safety_status == "DISCARD":
-            db.update_status(case_id, "discarded")
-            metrics.log_case_result(
-                case_id,
-                content.get("page_meta", {}).get("slug") or case_row.get("slug") or "",
-                "discarded",
-                safety_result.get("reason", "safety_discard"),
-                safety_status,
-                similarity_score,
-                len(joined.split()),
-                planning_info.get("user_intent"),
-                planning_info.get("structure_type"),
-                case_row.get("category") or "debt",
-            )
-            return {"status": "discarded", "reason": safety_result.get("reason", "safety_discard")}
-
-        if safety_status == "EDIT":
-            refined = safety_result.get("refined_content")
-            last_feedback = safety_result.get("reason", "")
-            last_content = refined or content
-            logging.info("Safety EDIT on %s (attempt %s): %s", case_id, attempt, last_feedback)
+        if safety_status in ("EDIT", "DISCARD"):
+            # safety 피드백을 활용해 자가 리라이트 1회 시도
+            if attempt >= max_retries:
+                db.update_status(case_id, "discarded")
+                metrics.log_case_result(
+                    case_id,
+                    content.get("page_meta", {}).get("slug") or case_row.get("slug") or "",
+                    "discarded",
+                    safety_result.get("reason", "safety_discard"),
+                    safety_status,
+                    similarity_score,
+                    uniqueness_score,
+                    unique_block_count,
+                    len(joined.split()),
+                    pui_scores.get("total") if pui_scores else None,
+                    pui_scores.get("structure_score") if pui_scores else None,
+                    pui_scores.get("data_score") if pui_scores else None,
+                    pui_scores.get("eeat_score") if pui_scores else None,
+                    planning_info.get("user_intent"),
+                    planning_info.get("structure_type"),
+                    case_row.get("category") or "debt",
+                )
+                return {"status": "discarded", "reason": safety_result.get("reason", "safety_discard")}
+            safety_fb = safety_result.get("reason", "")
+            last_feedback = safety_fb
+            last_content = safety_result.get("refined_content") or content
+            # 다음 루프에서 refine_draft 호출
+            logging.info("Safety %s on %s (attempt %s), try self-rewrite: %s", safety_status, case_id, attempt, safety_fb)
             continue
 
         # PASS 시 유사도/유니크 검사

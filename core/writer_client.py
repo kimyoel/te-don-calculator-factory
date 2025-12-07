@@ -62,7 +62,7 @@ def generate(case: Dict[str, Any], safe_test_mode: bool = False, planning_info: 
     return writer.generate_content(enriched)
 
 
-def refine_draft(case: Dict[str, Any], feedback: str, safe_test_mode: bool = False, planning_info: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+def refine_draft(case: Dict[str, Any], feedback: str, safe_test_mode: bool = False, planning_info: Optional[Dict[str, Any]] = None, safety_feedback: str = "") -> Optional[Dict[str, Any]]:
     """
     기존 draft와 feedback을 전달해 재작성.
     writer.generate_content가 feedback을 직접 쓰지 않더라도
@@ -70,6 +70,8 @@ def refine_draft(case: Dict[str, Any], feedback: str, safe_test_mode: bool = Fal
     """
     enriched_case = dict(case)
     enriched_case["feedback"] = feedback
+    if safety_feedback:
+        enriched_case["safety_feedback"] = safety_feedback
     # previous_draft는 호출 측에서 전달하는 텍스트 요약이라고 가정
     if "previous_draft" not in enriched_case and "draft_summary" in enriched_case:
         enriched_case["previous_draft"] = enriched_case.get("draft_summary")

@@ -21,13 +21,11 @@ SYSTEM_PROMPT = """
 당신은 '떼인 돈 계산기' pSEO 랜딩 콘텐츠를 생성하는 시니어 에디터입니다.
 반드시 docs/content_guidelines.md에 정의된 JSON 스키마와 작성 규칙을 따르세요.
 
-핵심 컴플라이언스 (한국어):
-- 이 콘텐츠는 법률 자문이 아님을 명시.
-- 승소/회수/결과를 보장하거나 확정적으로 단정하는 표현 금지.
-- 법률 전문가 상담을 권유하는 문구 포함.
-- 100% 회수, 무조건 승소, 보장 등의 표현 금지.
-- JSON 한 개 객체만 반환, 필수 필드 누락 금지, 불필요 필드 추가 금지.
-- 톤: 직관적·간결, 보수적이고 신중한 표현.
+법률/안전 컴플라이언스 (한국어):
+- 이 콘텐츠는 법률 자문/대리 서비스가 아님을 명확히 하고, 정보 제공·가이드 역할만 수행합니다.
+- 승소/회수/결과를 보장하거나 확정적으로 단정하는 표현(무조건, 반드시, 100% 회수, 책임집니다 등)을 절대 사용하지 않습니다.
+- 법률 전문가(변호사 등)와 상담해야 한다는 안내를 포함하되, 자문/대리처럼 보이지 않게 중립적·가이드 톤으로 작성합니다.
+- safety 필터에서 EDIT/DISCARD가 나는 법률 자문/보장 어투가 다시 나오지 않도록, 부드럽고 신중한 표현으로 재작성합니다.
 
 전개 규칙 (시작 금지/구조 다양화):
 - "미수금이란?" 같은 정의로 시작하지 말 것. 사용자 상황/핵심 경고/결론부터 시작.
@@ -58,6 +56,7 @@ def _build_messages(case: Dict[str, Any]) -> List[Dict[str, str]]:
     legal_strategy = case.get("legal_strategy", "")
     unique_point = case.get("unique_data_point", "")
     main_keyword = case.get("main_keyword", "")
+    safety_feedback = case.get("safety_feedback", "")
     user_prompt = {
         "role": "user",
         "content": (
@@ -76,6 +75,7 @@ def _build_messages(case: Dict[str, Any]) -> List[Dict[str, str]]:
             f"keywords: {case.get('keywords', '')}\n"
             f"이전 초안 요약(있다면): {prev_draft}\n"
             f"개선해야 할 피드백(있다면): {feedback}\n"
+            f"안전/톤 피드백(있다면): {safety_feedback}\n"
             f"user_intent: {intent}\n"
             f"structure_type: {structure_type}\n"
             f"relationship: {relationship}\n"
