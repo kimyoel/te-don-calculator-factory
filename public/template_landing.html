@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <meta name="description" content="{{DESCRIPTION}}">
+  <meta name="keywords" content="{{KEYWORDS}}">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="./index.html"><span>💸</span>떼인 돈 계산기</a>
+      <a class="ghost-link" href="../index.html">메인 계산기</a>
+    </header>
+
+    <div class="breadcrumb-wrap">
+      <div class="breadcrumb">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.172 3 10.172V20a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-4h4v4a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-9.828l-9-7Z"/>
+        </svg>
+        <a href="../index.html">홈</a>
+        <span class="breadcrumb-sep">›</span>
+        <a href="./index.html">상황별 미수금 가이드</a>
+        <span class="breadcrumb-sep">›</span>
+        <span class="breadcrumb-current breadcrumb-ellipsis">{{H1}}</span>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="pill">상황별 미수금 가이드</div>
+      <h1>{{H1}}</h1>
+      <p class="subtitle">{{PAIN_POINT}}</p>
+      <p class="intro">{{INTRO}}</p>
+    </section>
+
+    <section class="section">
+      <h2>이 상황에서 어떻게 움직이면 좋을지</h2>
+      <p>{{ACTION_STEPS}}</p>
+    </section>
+
+    <section class="section">
+      <h2>FAQ</h2>
+      <div class="faq">
+        <details>
+          <summary>{{FAQ1_Q}}</summary>
+          <div>{{FAQ1_A}}</div>
+        </details>
+        <details>
+          <summary>{{FAQ2_Q}}</summary>
+          <div>{{FAQ2_A}}</div>
+        </details>
+        <details>
+          <summary>{{FAQ3_Q}}</summary>
+          <div>{{FAQ3_A}}</div>
+        </details>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>떼인 돈 계산기로 금액 확인하기</h2>
+      <p>원금과 지급일을 입력하면 지연이자와 총 청구액을 바로 확인할 수 있습니다.</p>
+      <a class="cta" href="../index.html">떼인 돈 계산기 열기</a>
+      <div class="notice-box">
+        이 계산기는 입력하신 값을 기준으로 한 <strong>참고용 시뮬레이션</strong>입니다.<br />
+        실제 소송·집행 결과와 다를 수 있으며, 최종 판단은 법률 전문가와 상의해 주세요.
+      </div>
+    </section>
+
+    <section class="section" aria-label="면책 및 법령 안내">
+      <h2>면책 및 법령 안내</h2>
+      <p>{{LEGAL_DISCLAIMER}}</p>
+    </section>
+
+    <p class="footer">본 페이지의 안내는 일반적인 절차를 정리한 것으로, 개별 사건에 대한 법률 자문이 아닙니다.</p>
+    <p class="footer" style="font-size:12px;color:#6b7280;">※ 본 서비스는 일반 정보 제공 및 계산 예시일 뿐, 개별 사건에 대한 법률 자문이 아닙니다. 실제 대응은 법률 전문가와 상의해 절차를 결정해 주세요.</p>
+  </div>
+</body>
+</html>
+

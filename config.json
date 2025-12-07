@@ -1,0 +1,15 @@
+{
+  "target_per_day": 10,
+  "max_refill_loops": 3,
+  "domain_type": "debt",
+  "openai_model_writer": "gpt-5-mini",
+  "openai_model_safety": "gpt-5-mini",
+  "similarity_threshold": 0.4,
+  "max_cases_per_strategy_band": 100,
+  "min_pui_score": 80,
+  "initial_launch_limit": 0,
+  "openai_model_planner": "gpt-5.1",
+  "openai_model_writer": "gpt-5.1-mini",
+  "openai_model_safety": "gpt-5.1"
+}
+

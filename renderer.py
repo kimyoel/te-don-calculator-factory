@@ -11,12 +11,18 @@ from pathlib import Path
 from typing import Any, Dict
 
 TEMPLATE_PATH = Path("public") / "template_landing.html"
+TEMPLATE_TYPE_A = Path("public") / "template_type_a.html"
+TEMPLATE_TYPE_B = Path("public") / "template_type_b.html"
+TEMPLATE_TYPE_C = Path("public") / "template_type_c.html"
 OUTPUT_DIR = Path("public")
 
 
-def load_template() -> str:
+def load_template(path: Path) -> str:
     """템플릿 파일을 읽어 문자열로 반환합니다."""
-    return TEMPLATE_PATH.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8")
+
+
+DEFAULT_DISCLAIMER = "이 콘텐츠는 일반 정보 제공용 예시이며, 법률 자문이 아닙니다. 실제 분쟁 대응은 법률 전문가와 상담하세요."
 
 
 def _build_replacements(content: Dict[str, Any]) -> Dict[str, str]:
@@ -48,7 +54,7 @@ def _build_replacements(content: Dict[str, Any]) -> Dict[str, str]:
         "INTRO": hero.get("intro_copy", ""),
         "PAIN_POINT": situation.get("pain_summary", ""),
         "ACTION_STEPS": action.get("guidance", ""),
-        "LEGAL_DISCLAIMER": legal.get("disclaimer", ""),
+        "LEGAL_DISCLAIMER": legal.get("disclaimer", "") or DEFAULT_DISCLAIMER,
         **faq_map,
     }
     return replacements
@@ -81,7 +87,17 @@ def generate_and_save_landing(content: Dict[str, Any]) -> None:
     if not slug:
         raise ValueError("content.page_meta.slug 가 필요합니다.")
 
-    template_html = load_template()
+    # 구조 타입별 템플릿 선택
+    structure_type = content.get("structure_type") or (content.get("page_meta") or {}).get("structure_type")
+    template_path = TEMPLATE_PATH
+    if structure_type == "TYPE_A":
+        template_path = TEMPLATE_TYPE_A
+    elif structure_type == "TYPE_B":
+        template_path = TEMPLATE_TYPE_B
+    elif structure_type == "TYPE_C":
+        template_path = TEMPLATE_TYPE_C
+
+    template_html = load_template(template_path)
     final_html = render_landing_html(template_html, content)
     save_landing_html(slug, final_html)
 
