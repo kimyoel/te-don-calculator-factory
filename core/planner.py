@@ -174,7 +174,11 @@ def suggest_new_cases(domain: str = "debt", limit: int = 5) -> List[Dict[str, An
     except Exception:
         max_per_band = DEFAULT_MAX_PER_BAND
 
-    band_counts = db.count_cases_by_strategy_and_amount()
+    raw_counts = db.count_cases_by_strategy_and_amount()
+    band_counts: Dict[Tuple[str, str], int] = {}
+    for (ls, ab, st), cnt in raw_counts.items():
+        key = (ls, ab)
+        band_counts[key] = band_counts.get(key, 0) + cnt
     existing_slugs = set(db.get_all_slugs())
     results: List[Dict[str, Any]] = []
 
@@ -185,7 +189,9 @@ def suggest_new_cases(domain: str = "debt", limit: int = 5) -> List[Dict[str, An
             continue
         band_key = (planned.legal_strategy, seed.amount_band or "")
         current_cnt = band_counts.get(band_key, 0) + sum(
-            1 for r in results if r.get("legal_strategy") == planned.legal_strategy and (seed.amount_band or "") == seed.amount_band
+            1
+            for r in results
+            if r.get("legal_strategy") == planned.legal_strategy and (seed.amount_band or "") == seed.amount_band
         )
         if current_cnt >= max_per_band:
             continue

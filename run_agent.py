@@ -125,7 +125,7 @@ async def plan_and_append(client: Client, product_type: str, shortage: int, dry_
     if not ideas:
         return 0
     if dry_run:
-        logging.info("DRY-RUN: planner 생성 %s건, append는 수행하지 않습니다.", len(ideas))
+        logging.info("🧪 DRY-RUN: planner가 %s건 만들었지만 DB에는 안 넣어요.", len(ideas))
         return len(ideas)
     await client.call_tool("append_cases", {"cases": ideas})
     return len(ideas)
@@ -147,7 +147,7 @@ async def process_todo(
         if not case_id:
             continue
         if dry_run:
-            logging.info("DRY-RUN: run_case_pipeline 건너뜀 (%s)", case_id)
+            logging.info("🧪 DRY-RUN: run_case_pipeline 패스 (%s)", case_id)
             continue
         result = _unwrap(
             await client.call_tool(
@@ -159,18 +159,18 @@ async def process_todo(
         if status == "published":
             published += 1
             published_ids.append(case_id)
-            logging.info("PUBLISHED: %s -> %s", case_id, result.get("html_path"))
+            logging.info("✅ 발행 완료: %s -> %s", case_id, result.get("html_path"))
         elif status == "discarded":
             discarded.append(f"{case_id}:{result}")
-            logging.info("DISCARDED: %s (%s)", case_id, result)
+            logging.info("🧹 폐기됨: %s (%s)", case_id, result)
         else:
-            logging.info("RESULT: %s (%s)", case_id, result)
+            logging.info("ℹ️ 처리 결과: %s (%s)", case_id, result)
     return published
 
 
 def load_config(path: Path) -> Dict[str, Any]:
     if not path.exists():
-        logging.warning("config 파일이 없어 기본값을 사용합니다: %s", path)
+        logging.warning("⚠️ config 파일이 없어 기본값을 사용합니다: %s", path)
         return dict(DEFAULTS)
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -179,7 +179,7 @@ def load_config(path: Path) -> Dict[str, Any]:
         cfg.update({k: v for k, v in data.items() if v is not None})
         return cfg
     except Exception as exc:  # noqa: BLE001
-        logging.warning("config 로드 실패(%s), 기본값 사용: %s", path, exc)
+        logging.warning("⚠️ config 로드 실패(%s), 기본값 사용: %s", path, exc)
         return dict(DEFAULTS)
 
 
@@ -207,8 +207,8 @@ async def main_async(args: argparse.Namespace) -> None:
     domain_type = cfg.get("domain_type", DEFAULTS["domain_type"])
     initial_limit = int(cfg.get("initial_launch_limit", DEFAULTS["initial_launch_limit"]))
 
-    logging.info("config: %s", cfg)
-    logging.info("log file: %s", log_path)
+    logging.info("🔧 설정 로드: %s", cfg)
+    logging.info("🗒 로그 파일: %s", log_path)
 
     client = Client(SERVER_URL)
     published_ids: List[str] = []
@@ -221,8 +221,8 @@ async def main_async(args: argparse.Namespace) -> None:
                 test = await client.call_tool("list_todo_cases", {"limit": 1})
                 unwrapped_test = _unwrap(test)
                 logging.info("✅ MCP 연결 성공 (%s)", SERVER_URL)
-                logging.info("list_todo_cases 결과(raw): %r", test)
-                logging.info("list_todo_cases 결과(unwrapped): %s", unwrapped_test)
+                logging.info("🗂 list_todo_cases 원본 결과: %r", test)
+                logging.info("🗂 list_todo_cases 해제 결과: %s", unwrapped_test)
             except Exception as conn_exc:  # noqa: BLE001
                 logging.error("❌ MCP 연결 실패 (%s): %s", SERVER_URL, conn_exc)
                 return
@@ -233,7 +233,7 @@ async def main_async(args: argparse.Namespace) -> None:
             total_published = db.count_published_total()
             if initial_limit > 0 and (not args.ignore_initial_limit) and total_published >= initial_limit:
                 logging.warning(
-                    "Initial launch limit reached (%s pages). Stop auto production and wait for SEO/console review.",
+                    "⚠️ 초기 발행 상한 도달(%s건). SEO/콘솔 리뷰까지 자동 생산을 멈춥니다.",
                     total_published,
                 )
                 return
@@ -246,12 +246,12 @@ async def main_async(args: argparse.Namespace) -> None:
                 if needed <= 0:
                     break
 
-                logging.info("[Loop %s] 현재 published=%s, 필요=%s", loop_count + 1, published_today, needed)
+                logging.info("🔁 루프 %s: 현재 published=%s, 필요=%s", loop_count + 1, published_today, needed)
 
                 todo = await list_todo(client, limit=needed * 2)
                 if len(todo) < needed:
                     shortage = needed - len(todo)
-                    logging.info("TODO 부족: %s개, planner로 보충합니다.", shortage)
+                    logging.info("📋 TODO 부족 %s개 → planner 호출로 보충합니다.", shortage)
                     planned_total += await plan_and_append(
                         client,
                         product_type=domain_type,
@@ -271,11 +271,11 @@ async def main_async(args: argparse.Namespace) -> None:
                 published_today += gained
                 loop_count += 1
 
-            logging.info("요약: published=%s, discarded=%s, planned=%s, dry_run=%s",
+            logging.info("📊 요약: published=%s, discarded=%s, planned=%s, dry_run=%s",
                          len(published_ids), len(discarded), planned_total, args.dry_run)
-            logging.info("published_ids: %s", published_ids)
-            logging.info("discarded: %s", discarded)
-            logging.info("log file 위치: %s", log_path)
+            logging.info("🟢 발행 ID: %s", published_ids)
+            logging.info("🧹 폐기 목록: %s", discarded)
+            logging.info("🗒 로그 파일: %s", log_path)
     except Exception as exc:  # noqa: BLE001
         logging.error("❌ MCP 클라이언트 예외: %s", exc)
 

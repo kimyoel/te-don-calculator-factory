@@ -49,7 +49,7 @@ def list_todo_cases(limit: int = 10) -> List[Dict[str, Any]]:
                     "keywords": r.get("keywords"),
                 }
             )
-        logging.info("list_todo_cases 반환: %s", normalized)
+        logging.info("🗂 list_todo_cases 응답: %s", normalized)
         return normalized
     except Exception as exc:  # noqa: BLE001
         logging.exception("list_todo_cases 실패: %s", exc)

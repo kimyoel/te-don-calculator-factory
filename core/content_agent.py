@@ -87,98 +87,30 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
         "unique_data_point": case_row.get("unique_data_point"),
         "main_keyword": case_row.get("main_keyword"),
     }
-    last_feedback = ""
-    last_content: Optional[Dict[str, Any]] = None
     similarity_threshold = _load_similarity_threshold()
     min_pui = _load_min_pui()
-    similarity_score: Optional[float] = None
-    uniqueness_score: Optional[float] = None
-    unique_block_count: Optional[int] = None
-    pui_scores: Optional[Dict[str, int]] = None
-    safety_status: Optional[str] = None
 
-    for attempt in range(1, max_retries + 1):
-        if attempt == 1:
-            content = writer_client.generate(case_row, safe_test_mode=safe_mode, planning_info=planning_info)
-        else:
-            # refine with feedback
-            content = writer_client.refine_draft(
-                {**case_row, "draft_summary": last_content},
-                feedback=last_feedback,
-                safe_test_mode=safe_mode,
-                planning_info=planning_info,
-            )
-
-        if not content:
-            last_feedback = "writer_failed"
-            continue
-
+    def evaluate(content: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+        """safety→유사도/유니크→PUI까지 검사하고, publish 시 결과 리턴"""
+        nonlocal planning_info
         # slug 주입
         _inject_slug(content, case_row.get("slug"))
-        # 구조 타입 유지
         if planning_info.get("structure_type") and "structure_type" not in content:
             content["structure_type"] = planning_info["structure_type"]
 
         joined = _flatten_content(content)
         safety_result = safety.review_content(joined)
         safety_status = safety_result.get("status")
-
         if safety_status in ("EDIT", "DISCARD"):
-            # safety 피드백을 활용해 자가 리라이트 1회 시도
-            if attempt >= max_retries:
-                db.update_status(case_id, "discarded")
-                metrics.log_case_result(
-                    case_id,
-                    content.get("page_meta", {}).get("slug") or case_row.get("slug") or "",
-                    "discarded",
-                    safety_result.get("reason", "safety_discard"),
-                    safety_status,
-                    similarity_score,
-                    uniqueness_score,
-                    unique_block_count,
-                    len(joined.split()),
-                    pui_scores.get("total") if pui_scores else None,
-                    pui_scores.get("structure_score") if pui_scores else None,
-                    pui_scores.get("data_score") if pui_scores else None,
-                    pui_scores.get("eeat_score") if pui_scores else None,
-                    planning_info.get("user_intent"),
-                    planning_info.get("structure_type"),
-                    case_row.get("category") or "debt",
-                )
-                return {"status": "discarded", "reason": safety_result.get("reason", "safety_discard")}
-            safety_fb = safety_result.get("reason", "")
-            last_feedback = safety_fb
-            last_content = safety_result.get("refined_content") or content
-            # 다음 루프에서 refine_draft 호출
-            logging.info("Safety %s on %s (attempt %s), try self-rewrite: %s", safety_status, case_id, attempt, safety_fb)
-            continue
+            return None, {"reason": safety_result.get("reason", "safety_discard"), "refined": safety_result.get("refined_content")}
 
-        # PASS 시 유사도/유니크 검사
         similarity_score = quality.compute_similarity_to_existing(joined, limit=100)
         uniqueness_score = quality.compute_uniqueness_score(similarity_score)
         unique_block_count = quality.count_unique_blocks(joined, planning_info)
 
         needs_refine_similarity = similarity_score > similarity_threshold
         needs_refine_uniqueness = uniqueness_score < 0.6 or (unique_block_count or 0) < 3
-
         if needs_refine_similarity or needs_refine_uniqueness:
-            if attempt >= max_retries:
-                db.update_status(case_id, "discarded")
-                metrics.log_case_result(
-                    case_id,
-                    content.get("page_meta", {}).get("slug") or case_row.get("slug") or "",
-                    "discarded",
-                    "similarity_or_uniqueness_fail",
-                    safety_status,
-                    similarity_score,
-                    uniqueness_score,
-                    unique_block_count,
-                    len(joined.split()),
-                    planning_info.get("user_intent"),
-                    planning_info.get("structure_type"),
-                    case_row.get("category") or "debt",
-                )
-                return {"status": "discarded", "reason": "similarity_or_uniqueness_fail"}
             reason_parts = []
             if needs_refine_similarity:
                 reason_parts.append(f"유사도 {similarity_score:.2f} > {similarity_threshold:.2f}")
@@ -186,15 +118,16 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
                 reason_parts.append(
                     f"유니크도 {uniqueness_score:.2f} / 고유블록 {unique_block_count or 0} (기준: 0.6+, 3+)"
                 )
-            last_feedback = " / ".join(reason_parts) + " -> 더 독창적인 구조/표현/예시를 추가하세요."
-            last_content = content
-            logging.info("Similarity high on %s (attempt %s): %s", case_id, attempt, last_feedback)
-            continue
+            return None, {
+                "reason": " / ".join(reason_parts) + " -> 더 독창적인 구조/표현/예시를 추가하세요.",
+                "similarity": similarity_score,
+                "uniqueness": uniqueness_score,
+                "unique_blocks": unique_block_count,
+            }
 
-        # PUI 점수 계산
         pui_scores = quality.compute_pui_score(joined, planning_info, safety_result)
         logging.info(
-            "PUI on %s: total=%s, structure=%s, data=%s, eeat=%s",
+            "📐 PUI 점수 %s: total=%s, structure=%s, data=%s, eeat=%s",
             case_id,
             pui_scores.get("total"),
             pui_scores.get("structure_score"),
@@ -202,50 +135,71 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
             pui_scores.get("eeat_score"),
         )
         if pui_scores.get("total", 0) < min_pui:
-            if attempt >= max_retries:
-                db.update_status(case_id, "discarded")
-                metrics.log_case_result(
-                    case_id,
-                    content.get("page_meta", {}).get("slug") or case_row.get("slug") or "",
-                    "discarded",
-                    "pui_too_low",
-                    safety_status,
-                    similarity_score,
-                    uniqueness_score,
-                    unique_block_count,
-                    len(joined.split()),
-                    pui_scores.get("total"),
-                    pui_scores.get("structure_score"),
-                    pui_scores.get("data_score"),
-                    pui_scores.get("eeat_score"),
-                    planning_info.get("user_intent"),
-                    planning_info.get("structure_type"),
-                    case_row.get("category") or "debt",
-                )
-                return {"status": "discarded", "reason": "pui_too_low"}
-            last_feedback = (
-                f"PUI {pui_scores.get('total')} < 기준 {min_pui}. 구조/데이터/EEAT를 강화해 다시 작성하세요."
-            )
-            last_content = content
-            logging.info("PUI low on %s (attempt %s): %s", case_id, attempt, last_feedback)
-            continue
+            return None, {
+                "reason": f"PUI {pui_scores.get('total')} < 기준 {min_pui}. 구조/데이터/EEAT를 강화해 다시 작성하세요.",
+                "pui": pui_scores,
+            }
 
         # publish
-        try:
-            renderer_client.render_and_save(content)
-            db.update_status(case_id, "published")
-            slug = content.get("page_meta", {}).get("slug") or case_row.get("slug")
-            html_path = f"public/{slug}.html" if slug else ""
+        renderer_client.render_and_save(content)
+        db.update_status(case_id, "published")
+        slug = content.get("page_meta", {}).get("slug") or case_row.get("slug")
+        html_path = f"public/{slug}.html" if slug else ""
+        metrics.log_case_result(
+            case_id,
+            slug or "",
+            "published",
+            None,
+            "PASS",
+            similarity_score,
+            uniqueness_score,
+            unique_block_count,
+            len(joined.split()),
+            pui_scores.get("total"),
+            pui_scores.get("structure_score"),
+            pui_scores.get("data_score"),
+            pui_scores.get("eeat_score"),
+            planning_info.get("user_intent"),
+            planning_info.get("structure_type"),
+            case_row.get("category") or "debt",
+        )
+        result = {"status": "published", "html_path": html_path, "attempts": None}
+        return result, {}
+
+    attempts_allowed = max(1, min(max_retries, 2))
+
+    # 1차: 초안 생성
+    content = writer_client.generate(case_row, safe_test_mode=safe_mode, planning_info=planning_info)
+    attempt = 1
+    while attempt <= attempts_allowed:
+        if not content:
+            last_reason = "writer_failed"
+            break
+        # 평가
+        publish_result, info = evaluate(content)
+        if publish_result:
+            publish_result["attempts"] = attempt
+            return publish_result
+
+        reason = info.get("reason", "")
+        sim = info.get("similarity")
+        uniq = info.get("uniqueness")
+        ublocks = info.get("unique_blocks")
+        pui_scores = info.get("pui") if info.get("pui") else None
+        safety_refined = info.get("refined")
+
+        if attempt >= attempts_allowed:
+            db.update_status(case_id, "discarded")
             metrics.log_case_result(
                 case_id,
-                slug or "",
-                "published",
-                None,
-                safety_status,
-                similarity_score,
-                uniqueness_score,
-                unique_block_count,
-                len(joined.split()),
+                content.get("page_meta", {}).get("slug") or case_row.get("slug") or "",
+                "discarded",
+                reason or "max_attempts_exceeded",
+                "FAIL",
+                sim,
+                uniq,
+                ublocks,
+                len(_flatten_content(content).split()),
                 pui_scores.get("total") if pui_scores else None,
                 pui_scores.get("structure_score") if pui_scores else None,
                 pui_scores.get("data_score") if pui_scores else None,
@@ -254,36 +208,23 @@ def run_production_loop(case_id: str, max_retries: int = 3, include_content: boo
                 planning_info.get("structure_type"),
                 case_row.get("category") or "debt",
             )
-            result = {"status": "published", "html_path": html_path, "attempts": attempt}
-            if include_content:
-                result["content"] = content
-            return result
-        except Exception as exc:  # noqa: BLE001
-            logging.exception("렌더링/저장 중 오류: %s", exc)
-            last_feedback = f"render_error: {exc}"
-            continue
+            return {"status": "discarded", "reason": reason or "max_attempts_exceeded"}
 
-    # 실패
+        # 2차: safety reason 기반 리라이트
+        safety_fb = reason or "법률 자문/보장 어투 제거 및 안전한 정보 톤으로 재작성"
+        logging.info("🔁 리라이트 재시도 %s (시도 %s/%s): %s", case_id, attempt + 1, attempts_allowed, safety_fb)
+        content = writer_client.refine_draft(
+            {**case_row, "draft_summary": content},
+            feedback=safety_fb,
+            safe_test_mode=safe_mode,
+            planning_info=planning_info,
+            safety_feedback=safety_fb,
+        )
+        attempt += 1
+
+    # 실패 폴백
     db.update_status(case_id, "discarded")
-    metrics.log_case_result(
-        case_id,
-        case_row.get("slug") or "",
-        "discarded",
-        last_feedback or "max_retries_exceeded",
-        safety_status,
-        similarity_score,
-        uniqueness_score,
-        unique_block_count,
-        None,
-        pui_scores.get("total") if pui_scores else None,
-        pui_scores.get("structure_score") if pui_scores else None,
-        pui_scores.get("data_score") if pui_scores else None,
-        pui_scores.get("eeat_score") if pui_scores else None,
-        planning_info.get("user_intent"),
-        planning_info.get("structure_type"),
-        case_row.get("category") or "debt",
-    )
-    return {"status": "discarded", "reason": last_feedback or "max_retries_exceeded"}
+    return {"status": "discarded", "reason": "max_attempts_exceeded"}
 
 
 if __name__ == "__main__":
